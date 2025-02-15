@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch, wfdb, os, shutil, pdb, random
 from torch.utils.data import Dataset, DataLoader
+import pathlib
 
 class MIT_BIH_dataset(Dataset):
     def __init__(self, root, samples) -> None:
@@ -48,7 +49,7 @@ def Z_score(record: np.array):
     return (record - mu[..., None]) / std[..., None]
 
 def create_dataset(length=3, shift=2, fs=360):
-    AAMI_MIT  = {'N': 'Nfe/jnBLR',# 0, 将19类信号分为五大类, 按照Advancement of Medical Instrumentation (AAMI)标准
+    AAMI_MIT  = {'N': 'Nfe/jnBLR',# 0, 
              'S': 'SAJa', # 1
              'V': 'VEr', # 2
              'F': 'F', # 3
@@ -63,24 +64,27 @@ def create_dataset(length=3, shift=2, fs=360):
             AAMI_MIT2[s] = labMap[k]
 
     # pdb.set_trace()
-    rootpath = "/home/bebin.huang/Code/FoG_prediction/ECG_Object_Det/mit-bih-arrhythmia-database-1.0.0/"
+    rootpath = r"C:\Users\kelvi\03 MyDocuments\30 MyCode\TreeHacks 2025\mit-bih-arrhythmia-database-1.0.0\mit-bih-arrhythmia-database-1.0.0\\"
     person = [p[:3] for p in os.listdir(rootpath) if p.endswith(".dat")]
-    outputPath = "/home/bebin.huang/Code/FoG_prediction/ECG_Object_Det/ECG_dataset/"
-    if os.path.exists(outputPath):
-        shutil.rmtree(outputPath, ignore_errors=True)
+    outputPath = r"C:\Users\kelvi\03 MyDocuments\30 MyCode\TreeHacks 2025\ECG-arrhythmia-detection-based-on-DETR\\"
+    # if os.path.exists(outputPath):
+    #     shutil.rmtree(outputPath, ignore_errors=True)
+    print(f"Creating data path at...", outputPath+"data")
     os.makedirs(outputPath+"data")
     os.makedirs(outputPath+"labels")
 
     counts = {v: 0 for v in labMap.values()}
     cnt = 0
     for candidates in person[:]:
-        if not exists(rootpath+candidates+".hea", "MLII"):
-            print(f"candidate {candidates} does not include MLII")
-            continue
+        # if not exists(rootpath+candidates+".hea", "MLII"):
+        #     print(f"candidate {candidates} does not include MLII")
+        #     continue
         print("Prepare data in candidate {}.....".format(candidates))
         annotations = wfdb.rdann(rootpath+candidates, "atr")
-        records = wfdb.rdrecord(rootpath+candidates, physical=True, channel_names=["MLII"])
-        records = records.p_signal.flatten()
+        records = wfdb.rdrecord(rootpath+candidates, physical=True)
+        signals = records.p_signal[:, np.random.choice(records.p_signal.shape[1])]
+        records = signals.flatten()
+
         records = Z_score(records) ## Z-score
         index = np.isin(annotations.symbol, ECG_R_list)
         # pdb.set_trace()
@@ -132,12 +136,13 @@ def exists(path, chan_name):
     return False
 
 if __name__ == "__main__":
-    rootpath = "D:\\Desktop\\ECG分类研究\\dataset"
+    # rootpath = r"C:\Users\kelvi\03 MyDocuments\30 MyCode\TreeHacks 2025\mit-bih-arrhythmia-database-1.0.0\mit-bih-arrhythmia-database-1.0.0"
     # person = [p for p in os.listdir(rootpath) if p.endswith(".dat")]
     # print(person)
 
     # flag = exists(rootpath+"100.hea", "MLII")
     # print(flag)
+  
     create_dataset()
     # all_files = [f for f in os.listdir(os.path.join(rootpath, "data")) if f.endswith(".txt")]
     # random.shuffle(all_files)

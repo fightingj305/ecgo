@@ -7,13 +7,13 @@ from datasets import build_dataset, collate_fn
 from utils import plot_logs
 from torch.utils.data import DataLoader
 from engine import train_one_epoch, evaluate
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 class Arguments(object):
     def __init__(self) -> None:
         print(f"This machine has {torch.cuda.device_count()} gpu...")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.rootpath = "/home/bebin.huang/Code/FoG_prediction/ECG_Object_Det/ECG_dataset" ## dataset path
+        self.rootpath = r"C:\Users\kelvi\03 MyDocuments\30 MyCode\TreeHacks 2025\ECG-arrhythmia-detection-based-on-DETR\\" ## dataset path
         self.numfolds = 10
         self.seed = 10086
         self.batchsize = 128
@@ -25,6 +25,7 @@ class Arguments(object):
 def main():
     # pdb.set_trace()
     args = Arguments()
+    print("loaded arguments")
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
         logpath = os.path.join(args.output_dir, "log.txt")
