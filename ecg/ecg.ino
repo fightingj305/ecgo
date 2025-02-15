@@ -18,12 +18,12 @@
 #define DEB_DELAY 25
 
 // pins
-#define AD8232_PIN 4
+#define AD8232_PIN 13
 #define LEAD_OFF_PLUS 16
 #define LEAD_OFF_MINUS 17
-#define JOYSTICK_X 2 // zoom in/out
-#define JOYSTICK_Y 18 // move up/down
-#define ENABLE_BUT 5
+#define JOYSTICK_X 12 // zoom in/out
+#define JOYSTICK_Y 26 // move up/down
+#define ENABLE_BUT 25
 
 // wifi stufff
 const char ssid[] = WIFI_SSID;
@@ -71,7 +71,7 @@ void setup() {
 
   pinMode(LEAD_OFF_PLUS, INPUT);
   pinMode(LEAD_OFF_MINUS, INPUT);
-  pinMode(ENABLE_BUT, INPUT);
+  pinMode(ENABLE_BUT, INPUT_PULLUP);
 
   display.clearDisplay();
   display2.clearDisplay();
