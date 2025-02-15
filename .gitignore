@@ -1,3 +1,4 @@
 outputs/*.pth
 data/*.txt
 *.txt
+ecg/credentials.h

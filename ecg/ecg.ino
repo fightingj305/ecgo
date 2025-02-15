@@ -2,6 +2,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#include <WiFiUdp.h> 
+#include <HTTPClient.h>
+#include <WiFi.h>
+
+#include "credentials.h"
+
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define ADC_RANGE 4096
@@ -9,14 +15,20 @@
 #define DEAD_ZONE 512
 #define CALIBRATE_LEN 15
 
-#define AD8232_VAL 4
+#define DEB_DELAY 25
+
+// pins
+#define AD8232_PIN 4
 #define LEAD_OFF_PLUS 16
 #define LEAD_OFF_MINUS 17
 #define JOYSTICK_X 2 // zoom in/out
-#define JOYSTICK_Y 15 // move up/down
-#define ENABLE_BUT 18
+#define JOYSTICK_Y 18 // move up/down
+#define ENABLE_BUT 5
 
-const int j_speed = 50;
+// wifi stufff
+const char ssid[] = WIFI_SSID;
+const char password[] = WIFI_PASSWORD;
+HTTPClient http; 
 
 // setup 2 displays
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -27,6 +39,7 @@ int heart_val, prev_heart_val, count;
 bool lead_off_plus, lead_off_minus;
 
 // scroll variables
+const int j_speed = 50;
 int y_offset, screen_range;
 int X_CALIBRATE, Y_CALIBRATE;
 bool last_stopped;
@@ -53,6 +66,8 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
+  
+  connect_wifi();
 
   pinMode(LEAD_OFF_PLUS, INPUT);
   pinMode(LEAD_OFF_MINUS, INPUT);
@@ -83,6 +98,14 @@ void setup() {
   y_offset = 0;
   screen_range = 4096;
   debounce_timer = millis();
+}
+
+void connect_wifi() {
+  WiFi.begin(ssid, password);
+  delay(1000);
+  while (WiFi.status() != WL_CONNECTED) {
+    
+  }
 }
 
 // very simple funtion to just draw lines between adj data pts
@@ -175,7 +198,7 @@ void loop() {
   // update values
   heart_buffer[count] = heart_val;
   draw_wave(count == SCREEN_WIDTH, update, last_stopped, heart_buffer, &count);
-  heart_val = analogRead(AD8232_VAL);
+  heart_val = analogRead(AD8232_PIN);
   lead_off_plus = digitalRead(LEAD_OFF_PLUS);
   lead_off_minus = digitalRead(LEAD_OFF_MINUS);
   last_stopped = update;
