@@ -4,7 +4,7 @@
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define ADC_RANGE 1024
+#define ADC_RANGE 4096
 
 #define AD8232_VAL 4
 #define LEAD_OFF_PLUS 16
@@ -16,7 +16,10 @@ Adafruit_SSD1306 display2(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // stuff for displaying value
 int heart_val, prev_heart_val, count;
-char val_buffer[3];
+char val_buffer[20];
+char lop_buffer[20];
+char lom_buffer[20];
+bool lead_off_plus, lead_off_minus;
 
 void setup() {
   Serial.begin(115200);
@@ -47,7 +50,7 @@ void setup() {
   display.display(); 
   display2.display(); 
 
-  val_buffer[2] = '\0';
+  val_buffer[4] = '\0';
 }
 
 // very simple funtion to just draw lines between adj data pts
@@ -63,16 +66,24 @@ void draw_wave(bool reset, int data, int last_data, int *counter) {
 }
 
 void loop() {
-  draw_wave(count == SCREEN_WIDTH, heart_val, prev_heart_val, &count);
+  draw_wave(count == SCREEN_WIDTH, (heart_val * SCREEN_HEIGHT/ADC_RANGE), (prev_heart_val * SCREEN_HEIGHT/ADC_RANGE), &count);
   // update values
   prev_heart_val = heart_val;
   heart_val = analogRead(AD8232_VAL);
-  heart_val *= (SCREEN_HEIGHT/ADC_RANGE);
+  lead_off_plus = digitalRead(LEAD_OFF_PLUS);
+  lead_off_minus = digitalRead(LEAD_OFF_MINUS);
   display.display();
   // copy the value to a char buffer to display
   display2.clearDisplay();
-  snprintf(val_buffer, 2, "%d", heart_val);
+  // Serial.println(heart_val);
+  snprintf(val_buffer, 12,"H_VAL: %d", heart_val);
+  snprintf(lop_buffer, 8,"LO+: %d", lead_off_plus);
+  snprintf(lom_buffer, 8,"LO-: %d", lead_off_minus);
   display2.setCursor(0, 0);
   display2.print(val_buffer);
+  display2.setCursor(0, 20);
+  display2.print(lop_buffer);
+  display2.setCursor(0, 40);
+  display2.print(lom_buffer);
   display2.display();
 }
