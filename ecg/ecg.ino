@@ -16,19 +16,20 @@
 #define CALIBRATE_LEN 15
 
 #define DEB_DELAY 25
+#define COLLECT_TIME_MS 3000
 
 // pins
-#define AD8232_PIN 13
+#define AD8232_PIN 33
 #define LEAD_OFF_PLUS 16
 #define LEAD_OFF_MINUS 17
-#define JOYSTICK_X 12 // zoom in/out
-#define JOYSTICK_Y 26 // move up/down
+#define JOYSTICK_X 32 // zoom in/out
+#define JOYSTICK_Y 35 // move up/down
 #define ENABLE_BUT 25
 
 // wifi stufff
 const char ssid[] = WIFI_SSID;
 const char password[] = WIFI_PASSWORD;
-HTTPClient http; 
+HTTPClient http;
 
 // setup 2 displays
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -52,8 +53,11 @@ int heart_buffer[SCREEN_WIDTH];
 
 bool enable = true;
 bool deb_timer_on;
-unsigned long long int debounce_timer;
+bool collect_timer_on = false;
+unsigned long long int debounce_timer, collect_timer;
 bool last_state = true;
+
+int debug_values_collected = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -188,12 +192,30 @@ void loop() {
     deb_timer_on = true;
   }
   if (millis() - debounce_timer > DEB_DELAY && deb_timer_on) {
-    if (read_but) {
-      enable = !enable;
+    if (read_but && !collect_timer_on) {
+      collect_timer_on = true;
+      collect_timer = millis();
+      debug_values_collected = 0;
     }
     deb_timer_on = false;
   }
   last_state = read_but;
+
+  if (collect_timer_on && millis() - collect_timer < COLLECT_TIME_MS) {
+    // send data
+    debug_values_collected++;
+    enable = true;
+  }
+  else {
+    collect_timer_on = false;
+    enable = false;
+    debug_values_collected = 0;
+  }
+  
+  // debug to calculate # samples
+  if (debug_values_collected > 0) {
+    Serial.println(debug_values_collected);
+  }
 
   // update values
   heart_buffer[count] = heart_val;
