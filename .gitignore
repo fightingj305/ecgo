@@ -4,3 +4,4 @@ data/*.txt
 *.tfevents
 *.pth
 ecg/credentials.h
+.env

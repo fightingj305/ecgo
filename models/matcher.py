@@ -5,7 +5,6 @@ Modules to compute the matching cost and solve the corresponding LSAP.
 import sys, os
 curpth = os.path.abspath("..")
 # print(curpth)
-sys.path.append('D:\\Desktop\\ECG分类研究\\code')
 # print(sys.path[-1])
 import torch
 from scipy.optimize import linear_sum_assignment
@@ -83,7 +82,7 @@ class HungarianMatcher(nn.Module):
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
         C = C.view(bs, num_queries, -1).cpu()
 
-        ## 按每张图中gt数量将cost matrix分开, 对角线上的分块矩阵才是正确的cost matrix
+
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))] 
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]

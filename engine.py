@@ -55,6 +55,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
         outputs = model(samples)
+        # print(samples.shape)
+        print("target", targets)
         loss_dict = criterion(outputs, targets)
         for k in loss_dict.keys():
             if k not in meters.keys():
@@ -100,6 +102,7 @@ def evaluate(model: torch.nn.Module, criterion: torch.nn.Module, postprocessor: 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
+        print(samples.shape)
         outputs = model(samples)
         loss_dict = criterion(outputs, targets)
         for k in loss_dict.keys():

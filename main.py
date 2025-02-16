@@ -43,7 +43,7 @@ def main():
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    in_chan, d_model, num_class, num_queries, aux_loss = 1, 128, 5, 10, True
+    in_chan, d_model, num_class, num_queries, aux_loss = 1, 128, 4, 10, True
     model, criterion, postprocessor = build_model(in_chan, d_model, num_class, num_queries, aux_loss=aux_loss)
     model.to(args.device)
 
@@ -104,7 +104,7 @@ def main():
                 best_val_class_error = test_stats["class_error"]
                 patience_counter = 0  # Reset patience counter
                 
-                ckpt = os.path.join(args.output_dir, f"best_checkpoint.pth")
+                ckpt = os.path.join(args.output_dir, f"best_checkpoint2.pth")
                 torch.save({
                     "epoch": epoch,
                     "args": args,
