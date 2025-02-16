@@ -21,7 +21,7 @@
 #define COLLECT_TIME_MS 3000
 #define COLLECT_BUF_SIZE 80
 
-#define RESPONSE_TIMEOUT 5000
+#define RESPONSE_TIMEOUT 20000
 
 // pins
 #define AD8232_PIN 33
@@ -226,15 +226,15 @@ void post_data(int item_count, long collection_id){
 }
 
 String receive_diagnosis(long collection_id){
+  display2.fillRect(0, 0, SCREEN_WIDTH, 20, BLACK);
+  display2.setCursor(0,0);
+  display2.print("Waiting For Data");
+  display2.display();
   http.begin(influx_addr + "/api/v2/query?org=ECG+Data");
   http.addHeader("Authorization", "Token "+influx_token);
   http.addHeader("Content-Type", "application/vnd.flux");
   unsigned long long response_timer = millis();
   int response = 404;
-  display2.fillRect(0, 0, SCREEN_WIDTH, 20, BLACK);
-  display2.setCursor(0,0);
-  display2.print("Waiting For Data");
-  display2.display();
   String payload;
   while (millis() - response_timer < RESPONSE_TIMEOUT && response != 200) {
     String data = "from(bucket: \"data\") "

@@ -28,7 +28,7 @@ def query_influxdb_label(sample_id):
     |> filter(fn: (r) => r._field == "id" or r._field == "label")
     |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
     |> filter(fn: (r) => r.id == {sample_id})
-    |> sort(columns: ["_time"], desc: true)
+    |> sort(columns: ["_time"])
     |> limit(n:1)
     '''
 
@@ -64,9 +64,8 @@ def main():
     sample_id = st.number_input("Sample ID", min_value=0, max_value=10000, value=0, step=1)
 
     if st.button("Look up Data"):
-        # Query label
         label = query_influxdb_label(sample_id)
-        if label:
+        if label is not None:
             st.success(f"The label for Sample ID {sample_id} is: {label}")
         else:
             st.error(f"No label found for Sample ID {sample_id}")
