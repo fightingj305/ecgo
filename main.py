@@ -1,4 +1,3 @@
-
 import torch, random, os, time, json, pdb
 import datetime
 import numpy as np
@@ -7,6 +6,8 @@ from datasets import build_dataset, collate_fn
 from utils import plot_logs
 from torch.utils.data import DataLoader
 from engine import train_one_epoch, evaluate
+from torch.utils.tensorboard import SummaryWriter
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 class Arguments(object):
@@ -17,20 +18,27 @@ class Arguments(object):
         self.numfolds = 10
         self.seed = 10086
         self.batchsize = 128
-        self.epochs = 200
+        self.epochs = 150
         self.clip_max_norm = 0.15
         self.lr_drop = 80
         self.output_dir = "./outputs/"
+        self.early_stop_patience = 10  # Number of epochs with no improvement after which training will be stopped
 
 def main():
     # pdb.set_trace()
     args = Arguments()
     print("loaded arguments")
+    if not torch.cuda.is_available():
+        print("GPU is not available")
+        raise Exception("GPU is not available")
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
         logpath = os.path.join(args.output_dir, "log.txt")
         if os.path.exists(logpath):
             os.remove(logpath)
+    
+    writer = SummaryWriter(log_dir=args.output_dir)
+    
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -67,6 +75,10 @@ def main():
         print("Start training...")
         start_time = time.time()
         # pdb.set_trace()
+        
+        best_val_class_error = float("inf")
+        patience_counter = 0
+        
         for epoch in range(args.epochs):
             train_stats = train_one_epoch(
                 model, criterion, data_loader_train, optimizer, args.device, 
@@ -84,17 +96,30 @@ def main():
                         **{f"test_{k}": v for k, v in test_stats.items()},
                         }
 
+            writer.add_scalar('Training Loss', train_stats['loss'], epoch)
+            writer.add_scalar('Validation Loss', test_stats['loss'], epoch)
+            writer.add_scalar('Class Error', test_stats['class_error'], epoch)
+
+            if test_stats["class_error"] < best_val_class_error:
+                best_val_class_error = test_stats["class_error"]
+                patience_counter = 0  # Reset patience counter
+                
+                ckpt = os.path.join(args.output_dir, f"best_checkpoint.pth")
+                torch.save({
+                    "epoch": epoch,
+                    "args": args,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "lr_scheduler": lr_schedular.state_dict()
+                }, ckpt)
+                print(f"Model improved at epoch {epoch}, saved!")
+            else:
+                patience_counter += 1
+                if patience_counter >= args.early_stop_patience:
+                    print(f"Early stopping triggered after {epoch+1} epochs.")
+                    break
+
             if args.output_dir:
-                if (epoch + 1) % args.lr_drop == 0:
-                    ckpt = os.path.join(args.output_dir, f"checkpoint_{epoch:04}.pth")
-                    torch.save({
-                        "epoch": epoch,
-                        "args": args,
-                        "model": model.state_dict(),
-                        # "stats": log_stats,
-                        "optimizer": optimizer.state_dict(),
-                        "lr_scheduler": lr_schedular.state_dict()
-                    }, ckpt)
                 with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
@@ -102,6 +127,8 @@ def main():
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print('Fold.{} Training time {}'.format(fold, total_time_str))
+    
+    writer.close()
 
 if __name__ == "__main__":
     main()

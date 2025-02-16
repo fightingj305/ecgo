@@ -117,7 +117,7 @@ def create_dataset(length=3, shift=2, fs=360):
             # pdb.set_trace()
             start += shift * fs
             end += shift * fs
-            if len(gt_labels) == 0: ## 片段中无目标，删除
+            if len(gt_labels) == 0: 
                 continue
             cnt += 1
             ## write to csv file

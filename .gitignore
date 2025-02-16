@@ -1,4 +1,6 @@
-outputs/*.pth
 data/*.txt
 *.txt
+*.pyc
+*.tfevents
+*.pth
 ecg/credentials.h
