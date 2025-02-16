@@ -1,7 +1,6 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <ArduinoJson.h> 
 
 #include <WiFiUdp.h> 
 #include <HTTPClient.h>
@@ -208,6 +207,40 @@ void post_data(int item_count, long collection_id){
   http.end();
 }
 
+void receive_diagnosis(long collection_id){
+  http.begin(influx_addr + "/api/v2/query?org=ECG+Data");
+  http.addHeader("Authorization", "Token "+influx_token);
+  http.addHeader("Content-Type", "application/vnd.flux");
+  unsigned long long response_timer = millis();
+  int response = 404;
+  while (millis() - response_timer < RESPONSE_TIMEOUT && response != 200) {
+    String data = "from(bucket: \"data\") "
+                   "|> range(start: -1d) "
+                   "|> filter(fn: (r) => r._field == \"id\" or r._field == \"label\") "
+                   "|> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") "
+                   "|> filter(fn: (r) => r.id == 100) "
+                   "|> sort(columns: [\"_time\"], desc: true) "
+                   "|> limit(n:1)";
+    response = http.POST(data);
+    if (http.getString().length() == 0) {
+      response = 404;
+    }
+  }
+  String payload;
+  if (millis() - response_timer < RESPONSE_TIMEOUT) {
+  payload = http.getString();
+  }
+  else {
+    payload = "TIMEOUT";
+  }
+  String label = "";
+  int i = payload.length() - 1;
+  while (payload[i] != ',' && i > 0) {
+    label = payload[i] + label;
+    i--;
+  }
+}
+
 void loop() {
   // handle zoom
   int joy_x = analogRead(JOYSTICK_X);
@@ -253,6 +286,8 @@ void loop() {
       int id = random(LONG_MAX);
       // this blocks until data sent
       post_data(values_collected, id);
+      // this blocks until reply received
+      receive_diagnosis(id);
     }
     enable = false;
     values_collected = 0;
