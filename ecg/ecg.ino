@@ -2,6 +2,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#include <WiFiUdp.h> 
+#include <HTTPClient.h>
+#include <WiFi.h>
+
+#include "credentials.h"
+
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define ADC_RANGE 4096
@@ -9,26 +15,45 @@
 #define DEAD_ZONE 512
 #define CALIBRATE_LEN 15
 
-#define AD8232_VAL 4
+#define DEB_DELAY 25
+
+// pins
+#define AD8232_PIN 13
 #define LEAD_OFF_PLUS 16
 #define LEAD_OFF_MINUS 17
-#define JOYSTICK_X 2 // zoom in/out
-#define JOYSTICK_Y 15 // move up/down
+#define JOYSTICK_X 12 // zoom in/out
+#define JOYSTICK_Y 26 // move up/down
+#define ENABLE_BUT 25
 
-const int j_speed = 50;
+// wifi stufff
+const char ssid[] = WIFI_SSID;
+const char password[] = WIFI_PASSWORD;
+HTTPClient http; 
 
 // setup 2 displays
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 Adafruit_SSD1306 display2(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// stuff for displaying value
+// sensor values
 int heart_val, prev_heart_val, count; 
+bool lead_off_plus, lead_off_minus;
+
+// scroll variables
+const int j_speed = 50;
 int y_offset, screen_range;
 int X_CALIBRATE, Y_CALIBRATE;
+bool last_stopped;
+
+// buffers for idsplay
 char val_buffer[20];
 char lop_buffer[20];
 char lom_buffer[20];
-bool lead_off_plus, lead_off_minus;
+int heart_buffer[SCREEN_WIDTH];
+
+bool enable = true;
+bool deb_timer_on;
+unsigned long long int debounce_timer;
+bool last_state = true;
 
 void setup() {
   Serial.begin(115200);
@@ -41,9 +66,12 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
+  
+  connect_wifi();
 
   pinMode(LEAD_OFF_PLUS, INPUT);
   pinMode(LEAD_OFF_MINUS, INPUT);
+  pinMode(ENABLE_BUT, INPUT_PULLUP);
 
   display.clearDisplay();
   display2.clearDisplay();
@@ -69,24 +97,44 @@ void setup() {
 
   y_offset = 0;
   screen_range = 4096;
+  debounce_timer = millis();
+}
+
+void connect_wifi() {
+  WiFi.begin(ssid, password);
+  delay(1000);
+  while (WiFi.status() != WL_CONNECTED) {
+    
+  }
 }
 
 // very simple funtion to just draw lines between adj data pts
-void draw_wave(bool reset, int data, int last_data, int *counter) {
-  if (reset) {
+void draw_wave(bool reset, bool stopped, bool prev_stop, int buf[SCREEN_WIDTH], int *counter) {
+  if (reset || !stopped && prev_stop) {
     *counter = 0;
     display.clearDisplay();
   }
-  else {
-    display.drawLine(*counter - 1, last_data, *counter, data, WHITE);
+  else if (!stopped){
+    int val = buf[*counter];
+    int prev_val = val;
+    if (*counter > 0) { 
+      prev_val = buf[*counter - 1];
+    }
+    display.drawLine(*counter - 1,  adjust_val(prev_val, screen_range, y_offset), *counter,  adjust_val(val, screen_range, y_offset), WHITE);
     *counter = *counter + 1;
+  }
+  else {
+    display.clearDisplay();
+    for (int i = 0; i < *counter-1; i++) {
+      display.drawLine(i,  adjust_val(buf[i], screen_range, y_offset), i+1, adjust_val(buf[i+1], screen_range, y_offset), WHITE);
+    }
   }
 }
 
 void draw_display2(){
   // copy the value to a char buffer to display
   display2.clearDisplay();
-  snprintf(val_buffer, 12,"H_VAL: %d", heart_val);
+  snprintf(val_buffer, 16,"SENDING DATA: %d", enable);
   snprintf(lop_buffer, 8,"LO+: %d", lead_off_plus);
   snprintf(lom_buffer, 8,"LO-: %d", lead_off_minus);
 
@@ -128,17 +176,32 @@ bool update_bounds(int jx, int jy) {
 }
 
 void loop() {
+  // handle zoom
   int joy_x = analogRead(JOYSTICK_X);
   int joy_y = analogRead(JOYSTICK_Y);
-  Serial.printf("%d %d %d %d \n", joy_x, joy_y, screen_range, y_offset);
   bool update = update_bounds(joy_x, joy_y);
-  draw_wave(count == SCREEN_WIDTH, adjust_val(heart_val, screen_range, y_offset), adjust_val(prev_heart_val, screen_range, y_offset), &count);
+  bool read_but = digitalRead(ENABLE_BUT);
+
+  // debounce button
+  if (read_but && !last_state && !deb_timer_on) {
+    debounce_timer = millis();
+    deb_timer_on = true;
+  }
+  if (millis() - debounce_timer > DEB_DELAY && deb_timer_on) {
+    if (read_but) {
+      enable = !enable;
+    }
+    deb_timer_on = false;
+  }
+  last_state = read_but;
+
   // update values
-  prev_heart_val = heart_val;
-  heart_val = analogRead(AD8232_VAL);
+  heart_buffer[count] = heart_val;
+  draw_wave(count == SCREEN_WIDTH, update, last_stopped, heart_buffer, &count);
+  heart_val = analogRead(AD8232_PIN);
   lead_off_plus = digitalRead(LEAD_OFF_PLUS);
   lead_off_minus = digitalRead(LEAD_OFF_MINUS);
-
+  last_stopped = update;
   draw_display2();
 
   // call display
