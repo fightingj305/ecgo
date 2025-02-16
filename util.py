@@ -6,6 +6,7 @@ from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 import numpy as np
 import matplotlib.pyplot as plt
+from fastapi import FastAPI
 
 from main import Arguments
 # Now you can import the module
@@ -87,11 +88,25 @@ def process_data(model):
     write(label, id_val)
     print("written data")
 
-
+# app = FastAPI()
+# @app.get("/")
+# async def root():
+#     model = inference.load_model()
+#     process_data(model)
+#     return {"message": "Request Received"}
 
 if __name__ == "__main__":
     model = inference.load_model()
-    process_data(model)
+    print("loaded model")
+    while True:
+        try:
+            process_data(model)
+        except Exception as e:
+            print(f"Error processing data: {e}")
+        print("processed data")
+        time.sleep(13)
+    # process_data(model)
+    # model = inference.load_model()
 
 # with open(path, "a") as file:
 #     file.write(CSV_HEADER+"\n")
