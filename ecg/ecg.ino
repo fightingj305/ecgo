@@ -8,7 +8,7 @@
 
 #include "credentials.h"
 
-#define LONG_MAX 2147483647
+#define RAND_MAX 10000
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -30,6 +30,7 @@
 #define JOYSTICK_X 32 // zoom in/out
 #define JOYSTICK_Y 35 // move up/down
 #define ENABLE_BUT 26
+#define DEBUG_BUT 25
 #define SEED_PIN 36
 
 // wifi stufff
@@ -70,6 +71,7 @@ String influx_addr = INFLUX_ADDR;
 String influx_token = INFLUX_TOKEN;
 
 String diagnosis = "NONE";
+int sample_id = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -88,6 +90,7 @@ void setup() {
   pinMode(LEAD_OFF_PLUS, INPUT);
   pinMode(LEAD_OFF_MINUS, INPUT);
   pinMode(ENABLE_BUT, INPUT_PULLUP);
+  pinMode(DEBUG_BUT, INPUT_PULLUP);
 
   display.clearDisplay();
   display2.clearDisplay();
@@ -159,7 +162,9 @@ void draw_display2(String label){
   // draw 3 buffers for display 2
   const char *wifi_status = WiFi.status() == WL_CONNECTED ? "WiFi Connected" : "No WiFi";
   display2.setCursor(0,0);
-  display2.print("Last Diagnosis: " + label);
+  display2.print("Diagnosis: " + label);
+  display2.setCursor(0,9);
+  display2.print("Sample ID: " + String(sample_id));
   display2.setCursor(0,20);
   display2.print(wifi_status);
   display2.setCursor(0, 30);
@@ -205,11 +210,17 @@ void post_data(int item_count, long collection_id){
   display2.display();
   http.begin(influx_addr + "/api/v2/write?org=ECG+Data&bucket=data");
   http.addHeader("Authorization", "Token "+influx_token);
-  http.addHeader("Content-Type", " text/plain; charset=utf-8");
+  http.addHeader("Content-Type", "text/plain; charset=utf-8");
   String data;
   for (int i = 0; i < min(item_count, COLLECT_BUF_SIZE); i++) {
     data = "ecg_data adc_value="+String(collect_buffer[i][0])+"u,collection_time="+String(collect_buffer[i][1])+"u,collection_id="+String(collection_id)+"u";
     int http_response = http.POST(data);
+    if (http_response > 204){
+      display2.fillRect(0, 0, SCREEN_WIDTH, 20, BLACK);
+      display2.setCursor(0,0);
+      display2.print("Send Failed: HTTP " + String(http_response));
+      display2.display();
+    }
   }
   http.end();
 }
@@ -234,15 +245,13 @@ String receive_diagnosis(long collection_id){
                    "|> sort(columns: [\"_time\"], desc: true) "
                    "|> limit(n:1)";
     response = http.POST(data);
-    Serial.println(data);
     payload = http.getString();
-    if (payload.length() == 0) {
+    if (payload.length() < 10) {
       response = 404;
     }
   }
   String label = "";
   if (millis() - response_timer < RESPONSE_TIMEOUT) {
-    Serial.println(payload);
     int i = payload.length() - 1;
     while (payload[i] != ',' && i > 0) {
       label = payload[i] + label;
@@ -252,7 +261,6 @@ String receive_diagnosis(long collection_id){
   else {
     label = "TIMEOUT";
   }
-  Serial.println(label);
   return label;
 }
 
@@ -291,30 +299,24 @@ void loop() {
   if (collect_timer_on && read_time < COLLECT_TIME_MS + collect_timer) {
     // send data
     collect_buffer[values_collected][0] = heart_val;
-    collect_buffer[values_collected][1] = read_time - collect_timer;
+    collect_buffer[values_collected][1] = read_time < collect_timer ? 0 : read_time - collect_timer;
     values_collected++;
     enable = true;
   }
   else {
     collect_timer_on = false;
     if (last_collect_state) {
-      int id = random(LONG_MAX);
+      sample_id = random(RAND_MAX);
       // this blocks until data sent
-      post_data(values_collected, id);
+      post_data(values_collected, sample_id);
       // this blocks until reply received
-      diagnosis = receive_diagnosis(id);
+      diagnosis = receive_diagnosis(sample_id);
     }
     enable = false;
     values_collected = 0;
   }
   last_collect_state = collect_timer_on;
-
-
-  // debug to calculate # samples
-  // if (values_collected > 0) {
-  //   Serial.println(values_collected);
-  // }
-
+  
   // call display
   display.display();
   display2.display();
