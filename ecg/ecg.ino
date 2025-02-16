@@ -17,6 +17,7 @@
 
 #define DEB_DELAY 25
 #define COLLECT_TIME_MS 3000
+#define COLLECT_BUF_SIZE 60
 
 // pins
 #define AD8232_PIN 33
@@ -24,7 +25,7 @@
 #define LEAD_OFF_MINUS 17
 #define JOYSTICK_X 32 // zoom in/out
 #define JOYSTICK_Y 35 // move up/down
-#define ENABLE_BUT 25
+#define ENABLE_BUT 26
 
 // wifi stufff
 const char ssid[] = WIFI_SSID;
@@ -50,14 +51,19 @@ char val_buffer[20];
 char lop_buffer[20];
 char lom_buffer[20];
 int heart_buffer[SCREEN_WIDTH];
+int collect_buffer[COLLECT_BUF_SIZE][2];
 
 bool enable = true;
 bool deb_timer_on;
+bool last_but_state = true;
 bool collect_timer_on = false;
+bool last_collect_state = false;
 unsigned long long int debounce_timer, collect_timer;
-bool last_state = true;
 
-int debug_values_collected = 0;
+int values_collected = 0;
+String influx_addr = INFLUX_ADDR;
+String influx_token = INFLUX_TOKEN;
+
 
 void setup() {
   Serial.begin(115200);
@@ -179,6 +185,18 @@ bool update_bounds(int jx, int jy) {
   return y_offset != initial_yo || screen_range != initial_sr;
 }
 
+void post_data(int item_count){
+  http.begin(influx_addr + "/api/v2/write?org=ECG+Data&bucket=data");
+  http.addHeader("Authorization", "Token "+influx_token);
+  http.addHeader("Content-Type", " text/plain; charset=utf-8");
+  String data;
+  for (int i = 0; i < min(item_count, COLLECT_BUF_SIZE); i++) {
+    data = "ecg_data adc_value="+String(collect_buffer[i][0])+"u,collection_time="+String(collect_buffer[i][1])+"u";
+    int http_response = http.POST(data);
+  }
+  http.end();
+}
+
 void loop() {
   // handle zoom
   int joy_x = analogRead(JOYSTICK_X);
@@ -186,8 +204,18 @@ void loop() {
   bool update = update_bounds(joy_x, joy_y);
   bool read_but = digitalRead(ENABLE_BUT);
 
+  // update values
+  heart_buffer[count] = heart_val;
+  draw_wave(count == SCREEN_WIDTH, update, last_stopped, heart_buffer, &count);
+  unsigned long long read_time = millis();
+  heart_val = analogRead(AD8232_PIN);
+  lead_off_plus = digitalRead(LEAD_OFF_PLUS);
+  lead_off_minus = digitalRead(LEAD_OFF_MINUS);
+  last_stopped = update;
+  draw_display2();
+  
   // debounce button
-  if (read_but && !last_state && !deb_timer_on) {
+  if (read_but && !last_but_state && !deb_timer_on) {
     debounce_timer = millis();
     deb_timer_on = true;
   }
@@ -195,36 +223,34 @@ void loop() {
     if (read_but && !collect_timer_on) {
       collect_timer_on = true;
       collect_timer = millis();
-      debug_values_collected = 0;
+      values_collected = 0;
     }
     deb_timer_on = false;
   }
-  last_state = read_but;
+  last_but_state = read_but;
 
-  if (collect_timer_on && millis() - collect_timer < COLLECT_TIME_MS) {
+  if (collect_timer_on && read_time - collect_timer < COLLECT_TIME_MS) {
     // send data
-    debug_values_collected++;
+    collect_buffer[values_collected][0] = heart_val;
+    collect_buffer[values_collected][1] = read_time - collect_timer;
+    values_collected++;
     enable = true;
   }
   else {
     collect_timer_on = false;
+    if (last_collect_state) {
+      post_data(values_collected);
+    }
     enable = false;
-    debug_values_collected = 0;
+    values_collected = 0;
   }
-  
-  // debug to calculate # samples
-  if (debug_values_collected > 0) {
-    Serial.println(debug_values_collected);
-  }
+  last_collect_state = collect_timer_on;
 
-  // update values
-  heart_buffer[count] = heart_val;
-  draw_wave(count == SCREEN_WIDTH, update, last_stopped, heart_buffer, &count);
-  heart_val = analogRead(AD8232_PIN);
-  lead_off_plus = digitalRead(LEAD_OFF_PLUS);
-  lead_off_minus = digitalRead(LEAD_OFF_MINUS);
-  last_stopped = update;
-  draw_display2();
+
+  // debug to calculate # samples
+  // if (values_collected > 0) {
+  //   Serial.println(values_collected);
+  // }
 
   // call display
   display.display();
