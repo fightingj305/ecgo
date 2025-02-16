@@ -1,12 +1,15 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <ArduinoJson.h> 
 
 #include <WiFiUdp.h> 
 #include <HTTPClient.h>
 #include <WiFi.h>
 
 #include "credentials.h"
+
+#define LONG_MAX 2147483647
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -15,9 +18,11 @@
 #define DEAD_ZONE 512
 #define CALIBRATE_LEN 15
 
-#define DEB_DELAY 25
+#define DEB_DELAY 10
 #define COLLECT_TIME_MS 3000
-#define COLLECT_BUF_SIZE 60
+#define COLLECT_BUF_SIZE 80
+
+#define RESPONSE_TIMEOUT 5000
 
 // pins
 #define AD8232_PIN 33
@@ -26,6 +31,7 @@
 #define JOYSTICK_X 32 // zoom in/out
 #define JOYSTICK_Y 35 // move up/down
 #define ENABLE_BUT 26
+#define SEED_PIN 36
 
 // wifi stufff
 const char ssid[] = WIFI_SSID;
@@ -108,6 +114,8 @@ void setup() {
   y_offset = 0;
   screen_range = 4096;
   debounce_timer = millis();
+  
+  randomSeed(analogRead(SEED_PIN));
 }
 
 void connect_wifi() {
@@ -149,11 +157,14 @@ void draw_display2(){
   snprintf(lom_buffer, 8,"LO-: %d", lead_off_minus);
 
   // draw 3 buffers for display 2
-  display2.setCursor(0, 0);
+  const char *wifi_status = WiFi.status() == WL_CONNECTED ? "WiFi Connected" : "No WiFi";
+  display2.setCursor(0,20);
+  display2.print(wifi_status);
+  display2.setCursor(0, 30);
   display2.print(val_buffer);
-  display2.setCursor(0, 20);
-  display2.print(lop_buffer);
   display2.setCursor(0, 40);
+  display2.print(lop_buffer);
+  display2.setCursor(0, 50);
   display2.print(lom_buffer);
 }
 
@@ -165,18 +176,18 @@ int adjust_val (int val, int range, int y_offset) {
 bool update_bounds(int jx, int jy) {
   int initial_sr = screen_range;
   int initial_yo = y_offset;
-  if (jx > X_CALIBRATE + DEAD_ZONE) { // zoom out
-    screen_range+=j_speed;
-  }
-  else if (jx < X_CALIBRATE - DEAD_ZONE) { // zoom in
+  if (jx > X_CALIBRATE + DEAD_ZONE) { // zoom in
     screen_range-=j_speed;
   }
-
-  if (jy > Y_CALIBRATE + DEAD_ZONE) { // scroll up
-    y_offset-=j_speed;
+  else if (jx < X_CALIBRATE - DEAD_ZONE) { // zoom out
+    screen_range+=j_speed;
   }
-  else if (jy < Y_CALIBRATE - DEAD_ZONE) { // scroll down
+
+  if (jy > Y_CALIBRATE + DEAD_ZONE) { // scroll down
     y_offset+=j_speed;
+  }
+  else if (jy < Y_CALIBRATE - DEAD_ZONE) { // scroll up
+    y_offset-=j_speed;
   }
   screen_range = min(screen_range, ADC_RANGE);
   screen_range = max(screen_range, SCREEN_HEIGHT);
@@ -185,13 +196,13 @@ bool update_bounds(int jx, int jy) {
   return y_offset != initial_yo || screen_range != initial_sr;
 }
 
-void post_data(int item_count){
+void post_data(int item_count, long collection_id){
   http.begin(influx_addr + "/api/v2/write?org=ECG+Data&bucket=data");
   http.addHeader("Authorization", "Token "+influx_token);
   http.addHeader("Content-Type", " text/plain; charset=utf-8");
   String data;
   for (int i = 0; i < min(item_count, COLLECT_BUF_SIZE); i++) {
-    data = "ecg_data adc_value="+String(collect_buffer[i][0])+"u,collection_time="+String(collect_buffer[i][1])+"u";
+    data = "ecg_data adc_value="+String(collect_buffer[i][0])+"u,collection_time="+String(collect_buffer[i][1])+"u,collection_id="+String(collection_id)+"u";
     int http_response = http.POST(data);
   }
   http.end();
@@ -219,7 +230,7 @@ void loop() {
     debounce_timer = millis();
     deb_timer_on = true;
   }
-  if (millis() - debounce_timer > DEB_DELAY && deb_timer_on) {
+  if (deb_timer_on && millis() - debounce_timer > DEB_DELAY) {
     if (read_but && !collect_timer_on) {
       collect_timer_on = true;
       collect_timer = millis();
@@ -229,7 +240,7 @@ void loop() {
   }
   last_but_state = read_but;
 
-  if (collect_timer_on && read_time - collect_timer < COLLECT_TIME_MS) {
+  if (collect_timer_on && read_time < COLLECT_TIME_MS + collect_timer) {
     // send data
     collect_buffer[values_collected][0] = heart_val;
     collect_buffer[values_collected][1] = read_time - collect_timer;
@@ -239,7 +250,9 @@ void loop() {
   else {
     collect_timer_on = false;
     if (last_collect_state) {
-      post_data(values_collected);
+      int id = random(LONG_MAX);
+      // this blocks until data sent
+      post_data(values_collected, id);
     }
     enable = false;
     values_collected = 0;
