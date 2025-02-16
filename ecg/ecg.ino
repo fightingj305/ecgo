@@ -69,6 +69,7 @@ int values_collected = 0;
 String influx_addr = INFLUX_ADDR;
 String influx_token = INFLUX_TOKEN;
 
+String diagnosis = "NONE";
 
 void setup() {
   Serial.begin(115200);
@@ -148,7 +149,7 @@ void draw_wave(bool reset, bool stopped, bool prev_stop, int buf[SCREEN_WIDTH], 
   }
 }
 
-void draw_display2(){
+void draw_display2(String label){
   // copy the value to a char buffer to display
   display2.clearDisplay();
   snprintf(val_buffer, 16,"SENDING DATA: %d", enable);
@@ -157,6 +158,8 @@ void draw_display2(){
 
   // draw 3 buffers for display 2
   const char *wifi_status = WiFi.status() == WL_CONNECTED ? "WiFi Connected" : "No WiFi";
+  display2.setCursor(0,0);
+  display2.print("Last Diagnosis: " + label);
   display2.setCursor(0,20);
   display2.print(wifi_status);
   display2.setCursor(0, 30);
@@ -196,6 +199,10 @@ bool update_bounds(int jx, int jy) {
 }
 
 void post_data(int item_count, long collection_id){
+  display2.fillRect(0, 0, SCREEN_WIDTH, 20, BLACK);
+  display2.setCursor(0,0);
+  display2.print("Sending Data");
+  display2.display();
   http.begin(influx_addr + "/api/v2/write?org=ECG+Data&bucket=data");
   http.addHeader("Authorization", "Token "+influx_token);
   http.addHeader("Content-Type", " text/plain; charset=utf-8");
@@ -207,38 +214,46 @@ void post_data(int item_count, long collection_id){
   http.end();
 }
 
-void receive_diagnosis(long collection_id){
+String receive_diagnosis(long collection_id){
   http.begin(influx_addr + "/api/v2/query?org=ECG+Data");
   http.addHeader("Authorization", "Token "+influx_token);
   http.addHeader("Content-Type", "application/vnd.flux");
   unsigned long long response_timer = millis();
   int response = 404;
+  display2.fillRect(0, 0, SCREEN_WIDTH, 20, BLACK);
+  display2.setCursor(0,0);
+  display2.print("Waiting For Data");
+  display2.display();
+  String payload;
   while (millis() - response_timer < RESPONSE_TIMEOUT && response != 200) {
     String data = "from(bucket: \"data\") "
                    "|> range(start: -1d) "
                    "|> filter(fn: (r) => r._field == \"id\" or r._field == \"label\") "
                    "|> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\") "
-                   "|> filter(fn: (r) => r.id == 100) "
+                   "|> filter(fn: (r) => r.id == " + String(collection_id) + ") "
                    "|> sort(columns: [\"_time\"], desc: true) "
                    "|> limit(n:1)";
     response = http.POST(data);
-    if (http.getString().length() == 0) {
+    Serial.println(data);
+    payload = http.getString();
+    if (payload.length() == 0) {
       response = 404;
     }
   }
-  String payload;
+  String label = "";
   if (millis() - response_timer < RESPONSE_TIMEOUT) {
-  payload = http.getString();
+    Serial.println(payload);
+    int i = payload.length() - 1;
+    while (payload[i] != ',' && i > 0) {
+      label = payload[i] + label;
+      i--;
+    }
   }
   else {
-    payload = "TIMEOUT";
+    label = "TIMEOUT";
   }
-  String label = "";
-  int i = payload.length() - 1;
-  while (payload[i] != ',' && i > 0) {
-    label = payload[i] + label;
-    i--;
-  }
+  Serial.println(label);
+  return label;
 }
 
 void loop() {
@@ -256,7 +271,7 @@ void loop() {
   lead_off_plus = digitalRead(LEAD_OFF_PLUS);
   lead_off_minus = digitalRead(LEAD_OFF_MINUS);
   last_stopped = update;
-  draw_display2();
+  draw_display2(diagnosis);
   
   // debounce button
   if (read_but && !last_but_state && !deb_timer_on) {
@@ -287,7 +302,7 @@ void loop() {
       // this blocks until data sent
       post_data(values_collected, id);
       // this blocks until reply received
-      receive_diagnosis(id);
+      diagnosis = receive_diagnosis(id);
     }
     enable = false;
     values_collected = 0;
