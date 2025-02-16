@@ -1,3 +1,5 @@
-outputs/*.pth
 data/*.txt
 *.txt
+*.pyc
+*.tfevents
+*.pth

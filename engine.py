@@ -3,6 +3,7 @@ import torch, math, sys, pdb
 from tqdm import tqdm
 from collections import deque, defaultdict
 
+
 class SmootheValue(object):
     def __init__(self, window_size=20) -> None:
         self.deque = deque(maxlen=window_size)
