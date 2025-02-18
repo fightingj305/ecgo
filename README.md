@@ -1,4 +1,4 @@
-# ECGO: Mobile ECG for Arrhythmia Detection
+# ECGO: Mobile ECG for Arrhythmia Detection - Treehacks 2025 Winner for Most Crazy Idea (Sponsored by Eigenlayer)
 
 See our devpost!
 https://devpost.com/software/ecgo
